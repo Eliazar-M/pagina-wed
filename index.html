@@ -1567,7 +1567,7 @@
         const defaultPreferences = {
             nombreTienda: "Tejidos de Crochet",
             subtituloTienda: "Amigurumis y prendas tejidas con amor a mano",
-            telefonoWhatsapp: "573000000000",
+            telefonoWhatsapp: "573113564923",
             usuarioInstagram: "tu_usuario_aqui"
         };
 
@@ -1694,7 +1694,7 @@
             // Cargar preferencias
             try {
                 const prefGuardadas = localStorage.getItem('crochetStorePref');
-                state.pref = prefGuardadas ? JSON.parse(prefGuardadas) : defaultPreferences;
+                state.pref = prefGuardadas ? { ...defaultPreferences, ...JSON.parse(prefGuardadas) } : defaultPreferences;
             } catch (e) {
                 console.error("Error al leer preferencias, cargando iniciales", e);
                 state.pref = defaultPreferences;
@@ -2142,7 +2142,8 @@
                             `----------------------------------\n` +
                             `✨ _A la espera de confirmación bancaria/despacho. ¡Hecho con amor!_ ✨`;
 
-            const enlace = `https://wa.me/${state.pref.telefonoWhatsApp}?text=${encodeURIComponent(mensaje)}`;
+            const numeroWhatsapp = state.pref.telefonoWhatsapp && state.pref.telefonoWhatsapp !== "undefined" ? state.pref.telefonoWhatsapp : "573113564923";
+            const enlace = `https://wa.me/${numeroWhatsapp}?text=${encodeURIComponent(mensaje)}`;
             
             // Limpiar carrito y cerrar modales
             state.carrito = [];
