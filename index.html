@@ -1633,16 +1633,23 @@
         let isAdminUnlocked = false;
 
         function unlockAdmin() {
-            isAdminUnlocked = true;
-            localStorage.setItem('crochetAdminUnlocked', 'true');
-            
-            const navBtnAdmin = document.getElementById('navBtnAdmin');
-            if (navBtnAdmin) {
-                navBtnAdmin.style.display = 'inline-flex';
+            const password = prompt("Ingrese la contraseña de administrador:");
+            if (password === "1993") {
+                isAdminUnlocked = true;
+                localStorage.setItem('crochetAdminUnlocked', 'true');
+                
+                const navBtnAdmin = document.getElementById('navBtnAdmin');
+                if (navBtnAdmin) {
+                    navBtnAdmin.style.display = 'inline-flex';
+                }
+                
+                switchView('admin');
+                showToast("🔑 ¡Modo Administrador activado!");
+            } else {
+                if (password !== null) {
+                    showToast("❌ Contraseña incorrecta.");
+                }
             }
-            
-            switchView('admin');
-            showToast("🔑 ¡Modo Administrador activado!");
         }
 
         function lockAdmin() {
