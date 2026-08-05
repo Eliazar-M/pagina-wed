@@ -1559,8 +1559,36 @@
         </div>
     </footer>
 
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
     <!-- ==================== LOGICA JAVASCRIPT ==================== -->
     <script>
+        // --- CONFIGURACIÓN E INICIALIZACIÓN FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGCcDjiJuoCtMiIGcPwRjHYeRTQ0HwG6M",
+            authDomain: "tienda-de-crochet.firebaseapp.com",
+            databaseURL: "https://tienda-de-crochet-default-rtdb.firebaseio.com",
+            projectId: "tienda-de-crochet",
+            storageBucket: "tienda-de-crochet.firebasestorage.app",
+            messagingSenderId: "1070132836429",
+            appId: "1:1070132836429:web:300ebcb0ca6c0dcf808404",
+            measurementId: "G-ZP09LKQPY0"
+        };
+        
+        // Inicializar Firebase (con protección por si las credenciales no están aún)
+        let database;
+        try {
+            // Solo intenta inicializar si el apiKey no es el placeholder
+            if (firebaseConfig.apiKey !== "TU_API_KEY") {
+                firebase.initializeApp(firebaseConfig);
+                database = firebase.firestore();
+            }
+        } catch (e) {
+            console.warn("Firebase no está configurado correctamente aún.", e);
+        }
+
         // --- CONFIGURACIÓN E INICIALIZACIÓN ---
         
         // Estructura de preferencias por defecto
@@ -1696,44 +1724,62 @@
             busquedaQuery: ''
         };
 
-        // --- CARGA Y SINCRONIZACIÓN DE LOCAL STORAGE ---
-        function loadState() {
-            // Cargar preferencias
-            try {
-                const prefGuardadas = localStorage.getItem('crochetStorePref');
-                state.pref = prefGuardadas ? { ...defaultPreferences, ...JSON.parse(prefGuardadas) } : defaultPreferences;
-            } catch (e) {
-                console.error("Error al leer preferencias, cargando iniciales", e);
+        // --- CARGA Y SINCRONIZACIÓN DE BASE DE DATOS FIREBASE ---
+        async function loadState() {
+            if (!database) {
+                console.warn("Falta configurar las credenciales de Firebase. Cargando datos por defecto.");
                 state.pref = defaultPreferences;
-            }
-
-            // Cargar productos
-            try {
-                const prodGuardados = localStorage.getItem('crochetStoreProducts');
-                state.productos = prodGuardados ? JSON.parse(prodGuardados) : defaultProducts;
-            } catch (e) {
-                console.error("Error al leer catálogo, cargando iniciales", e);
                 state.productos = defaultProducts;
-            }
-
-            // Cargar carrito de compras
-            try {
                 const cartGuardado = localStorage.getItem('crochetStoreCart');
                 state.carrito = cartGuardado ? JSON.parse(cartGuardado) : [];
-            } catch (e) {
-                state.carrito = [];
+                return;
+            }
+
+            try {
+                // Leer datos de Firestore (una sola vez al cargar la página)
+                const docRef = database.collection('storeData').doc('main');
+                const snapshot = await docRef.get();
+                const data = snapshot.exists ? snapshot.data() : {};
+
+                // Cargar preferencias
+                state.pref = data.pref ? { ...defaultPreferences, ...data.pref } : defaultPreferences;
+
+                // Cargar productos
+                state.productos = data.productos ? data.productos : defaultProducts;
+
+                // Cargar carrito de compras
+                // El carrito se mantiene en localStorage ya que es preferible que sea único por dispositivo
+                const cartGuardado = localStorage.getItem('crochetStoreCart');
+                state.carrito = cartGuardado ? JSON.parse(cartGuardado) : [];
+                
+            } catch (error) {
+                console.error("Error al conectar con Firebase. Cargando datos por defecto.", error);
+                state.pref = defaultPreferences;
+                state.productos = defaultProducts;
+                const cartGuardado = localStorage.getItem('crochetStoreCart');
+                state.carrito = cartGuardado ? JSON.parse(cartGuardado) : [];
             }
         }
 
         function saveProductsToStorage() {
-            localStorage.setItem('crochetStoreProducts', JSON.stringify(state.productos));
+            if (database) {
+                database.collection('storeData').doc('main').set({ productos: state.productos }, { merge: true }).catch(error => {
+                    console.error("Error al guardar productos en Firebase", error);
+                    showToast("❌ Error al guardar en Firebase. Revisa la consola.");
+                });
+            }
         }
 
         function savePreferencesToStorage() {
-            localStorage.setItem('crochetStorePref', JSON.stringify(state.pref));
+            if (database) {
+                database.collection('storeData').doc('main').set({ pref: state.pref }, { merge: true }).catch(error => {
+                    console.error("Error al guardar preferencias en Firebase", error);
+                });
+            }
         }
 
         function saveCartToStorage() {
+            // El carrito es local al dispositivo
             localStorage.setItem('crochetStoreCart', JSON.stringify(state.carrito));
         }
 
@@ -2215,27 +2261,54 @@
             });
         }
 
-        // Convertir fotos locales en base64 al cargarlas
+        // Convertir fotos locales en base64 al cargarlas y comprimirlas
         function procesarArchivoImagen(files) {
             if (files.length === 0) return;
             const file = files[0];
             
             const reader = new FileReader();
             reader.onload = function(e) {
-                const base64Str = e.target.result;
-                
-                // Mostrar vista previa en la zona drag
-                const preview = document.getElementById('uploadedImagePreview');
-                preview.src = base64Str;
-                preview.style.display = 'block';
-                
-                // Ocultar texto drag
-                document.querySelector('.image-upload-zone svg').style.display = 'none';
-                document.querySelector('.image-upload-text').style.display = 'none';
-                
-                // Asignar al input oculto
-                document.getElementById('imagenUrl').value = base64Str;
-                showToast("📸 Foto cargada correctamente.");
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Comprimir a JPEG con 70% de calidad
+                    const base64Str = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    // Mostrar vista previa en la zona drag
+                    const preview = document.getElementById('uploadedImagePreview');
+                    preview.src = base64Str;
+                    preview.style.display = 'block';
+                    
+                    // Ocultar texto drag
+                    document.querySelector('.image-upload-zone svg').style.display = 'none';
+                    document.querySelector('.image-upload-text').style.display = 'none';
+                    
+                    // Asignar al input oculto
+                    document.getElementById('imagenUrl').value = base64Str;
+                    showToast("📸 Foto comprimida y cargada correctamente.");
+                };
+                img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
@@ -2459,8 +2532,8 @@
         }
 
         // --- INICIALIZACIÓN ---
-        window.addEventListener('DOMContentLoaded', () => {
-            loadState();
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadState();
             checkAdminAccess();
             aplicarConfiguracionVisual();
             renderizarControles();
