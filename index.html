@@ -1547,13 +1547,8 @@
             </div>
             <div class="footer-instagram">
                 <h5><a href="https://instagram.com/mafegarjara" target="_blank" style="text-decoration: none; color: inherit;">Instagram @mafegarjara</a></h5>
-                <div class="instagram-grid">
-                    <img class="instagram-img" src="imagen.img/bolso-bambu.jpeg" alt="Bolso Bambú" onerror="this.src='https://images.unsplash.com/photo-1608155686393-8fdd966d784d?w=150'">
-                    <img class="instagram-img" src="imagen.img/bolso-negro.jpeg" alt="Bolso Negro" onerror="this.src='https://images.unsplash.com/photo-1575424909138-46b05e5919ec?w=150'">
-                    <img class="instagram-img" src="imagen.img/bolso-beige.jpeg" alt="Cartera Beige" onerror="this.src='https://images.unsplash.com/photo-1618220179428-22790b461013?w=150'">
-                    <img class="instagram-img" src="imagen.img/mochila-cafe.jpeg" alt="Mochila Café" onerror="this.src='https://images.unsplash.com/photo-1563245372-f21724e3856d?w=150'">
-                    <img class="instagram-img" src="imagen.img/bolso-verde.jpeg" alt="Bolso Verde" onerror="this.src='https://images.unsplash.com/photo-1595079676339-1534801ad6cf?w=150'">
-                    <img class="instagram-img" src="imagen.img/bolso-perlas.jpeg" alt="Bolso Perlas" onerror="this.src='https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150'">
+                <div class="instagram-grid" id="footerInstagramGrid">
+                    <!-- Se rellena dinámicamente desde state.productos -->
                 </div>
             </div>
         </div>
@@ -2540,14 +2535,70 @@
             }, 3000);
         }
 
+        // --- RENDERIZAR GRID DE INSTAGRAM EN EL FOOTER DESDE LOS PRODUCTOS ---
+        function renderizarFooterInstagram() {
+            const grid = document.getElementById('footerInstagramGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            // Mostrar hasta 6 imágenes de productos
+            const prods = state.productos.slice(0, 6);
+            prods.forEach(prod => {
+                const img = document.createElement('img');
+                img.className = 'instagram-img';
+                img.src = prod.imagen;
+                img.alt = prod.titulo;
+                img.onerror = function() {
+                    this.src = 'https://images.unsplash.com/photo-1608155686393-8fdd966d784d?w=150';
+                };
+                img.onclick = () => { switchView('client'); filtrarPorCategoria('Todo'); window.scrollTo({top: 0, behavior:'smooth'}); };
+                img.style.cursor = 'pointer';
+                img.title = prod.titulo;
+                grid.appendChild(img);
+            });
+        }
+
         // --- INICIALIZACIÓN ---
         window.addEventListener('DOMContentLoaded', async () => {
-            await loadState();
+            // ── PASO 1: Renderizar INMEDIATAMENTE con datos por defecto (sin esperar Firebase)
+            state.pref = defaultPreferences;
+            state.productos = defaultProducts;
+            const cartGuardado = localStorage.getItem('crochetStoreCart');
+            state.carrito = cartGuardado ? JSON.parse(cartGuardado) : [];
+
             checkAdminAccess();
             aplicarConfiguracionVisual();
             renderizarControles();
             renderizarCatalogoCliente();
+            renderizarFooterInstagram();
             actualizarContadorCarrito();
+
+            // ── PASO 2: Actualizar en segundo plano con datos reales de Firebase (si hay conexión)
+            if (database) {
+                try {
+                    const docRef = database.collection('storeData').doc('main');
+                    const snapshot = await docRef.get();
+                    if (snapshot.exists) {
+                        const data = snapshot.data();
+                        let huboCambios = false;
+
+                        if (data.pref) {
+                            state.pref = { ...defaultPreferences, ...data.pref };
+                            aplicarConfiguracionVisual();
+                        }
+                        if (data.productos && data.productos.length > 0) {
+                            state.productos = data.productos;
+                            huboCambios = true;
+                        }
+                        if (huboCambios) {
+                            renderizarControles();
+                            renderizarCatalogoCliente();
+                            renderizarFooterInstagram();
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Firebase no disponible, usando datos por defecto.', error);
+                }
+            }
         });
 
     </script>
